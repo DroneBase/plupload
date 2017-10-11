@@ -94,7 +94,7 @@ var plupload = {
 	 * @static
 	 * @final
 	 */
-	VERSION : '2.1.9',
+	VERSION : '2.1.9-patched',
 
 	/**
 	 * The state of the queue before it has started and after it has finished
@@ -1497,6 +1497,17 @@ plupload.Uploader = function(options) {
 				xhr = null;
 			};
 
+			var self = this;
+
+			function skip() {
+				console.log("----- SKIPPING -----")
+				file.loaded = Math.min(file.size, offset + file.size);
+				up.trigger('StateChanged');
+				up.trigger('UploadProgress', file);
+				xhr.onload();
+				xhr.onloadend();
+			}
+
 			// Build multipart request
 			if (up.settings.multipart && features.multipart) {
 				xhr.open("post", url, true);
@@ -1515,13 +1526,22 @@ plupload.Uploader = function(options) {
 
 				// Add file and send it
 				formData.append(up.settings.file_data_name, chunkBlob);
-				xhr.send(formData, {
-					runtime_order: up.settings.runtimes,
-					required_caps: up.settings.required_features,
-					preferred_caps: preferred_caps,
-					swf_url: up.settings.flash_swf_url,
-					xap_url: up.settings.silverlight_xap_url
-				});
+
+				var trigger_multipart_request = function() {
+					xhr.send(formData, {
+						runtime_order: up.settings.runtimes,
+						required_caps: up.settings.required_features,
+						preferred_caps: preferred_caps,
+						swf_url: up.settings.flash_swf_url,
+						xap_url: up.settings.silverlight_xap_url
+					});
+				}
+
+				if (up.settings.pre_chunk_upload_check) {
+					up.settings.pre_chunk_upload_check.then(trigger_multipart_request, skip)
+				} else {
+					trigger_multipart_request();
+				}
 			} else {
 				// if no multipart, send as binary stream
 				url = plupload.buildUrl(up.settings.url, plupload.extend(args, up.settings.multipart_params));
@@ -1535,13 +1555,22 @@ plupload.Uploader = function(options) {
 					xhr.setRequestHeader(name, value);
 				});
 
-				xhr.send(chunkBlob, {
-					runtime_order: up.settings.runtimes,
-					required_caps: up.settings.required_features,
-					preferred_caps: preferred_caps,
-					swf_url: up.settings.flash_swf_url,
-					xap_url: up.settings.silverlight_xap_url
-				});
+				var trigger_binary_request = function() {
+					xhr.send(chunkBlob, {
+						runtime_order: up.settings.runtimes,
+						required_caps: up.settings.required_features,
+						preferred_caps: preferred_caps,
+						swf_url: up.settings.flash_swf_url,
+						xap_url: up.settings.silverlight_xap_url
+					});
+				}
+
+				if (up.settings.pre_chunk_upload_check) {
+					up.settings.pre_chunk_upload_check.then(trigger_binary_request, skip)
+				} else {
+					trigger_binary_request();
+				}
+
 			}
 		}
 
